@@ -44,6 +44,30 @@ function normalizeArrow(value, index) {
   };
 }
 
+function normalizeOverlay(value, fallbackOverlay, fallbackNotes = []) {
+  if (!isRecord(value)) {
+    return {
+      ...fallbackOverlay,
+      text: fallbackNotes.join("\n") || fallbackOverlay.text,
+    };
+  }
+
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const width = Number(value.width);
+  const fontSize = Number(value.fontSize);
+  const padding = Number(value.padding);
+
+  return {
+    text: typeof value.text === "string" ? value.text : fallbackNotes.join("\n") || fallbackOverlay.text,
+    x: Number.isFinite(x) ? x : fallbackOverlay.x,
+    y: Number.isFinite(y) ? y : fallbackOverlay.y,
+    width: Number.isFinite(width) ? width : fallbackOverlay.width,
+    fontSize: Number.isFinite(fontSize) ? fontSize : fallbackOverlay.fontSize ?? 2.2,
+    padding: Number.isFinite(padding) ? padding : fallbackOverlay.padding ?? 2.2,
+  };
+}
+
 function normalizePlayers(players, fallbackPlayers) {
   if (!Array.isArray(players)) {
     return fallbackPlayers;
@@ -72,6 +96,10 @@ function normalizeFrame(frame, index) {
     return fallbackFrame;
   }
 
+  const notes = Array.isArray(frame.notes)
+    ? frame.notes.filter((note) => typeof note === "string")
+    : fallbackFrame.notes;
+
   return {
     ...fallbackFrame,
     id: typeof frame.id === "string" && frame.id ? frame.id : fallbackFrame.id,
@@ -82,9 +110,8 @@ function normalizeFrame(frame, index) {
     arrows: Array.isArray(frame.arrows)
       ? frame.arrows.map(normalizeArrow).filter(Boolean)
       : fallbackFrame.arrows,
-    notes: Array.isArray(frame.notes)
-      ? frame.notes.filter((note) => typeof note === "string")
-      : fallbackFrame.notes,
+    notes,
+    overlay: normalizeOverlay(frame.overlay, fallbackFrame.overlay, notes),
   };
 }
 
@@ -120,6 +147,7 @@ function normalizeLesson(lesson, index) {
   return {
     ...fallbackLesson,
     id: typeof lesson.id === "string" && lesson.id ? lesson.id : fallbackLesson.id,
+    active: typeof lesson.active === "boolean" ? lesson.active : fallbackLesson.active ?? true,
     section: typeof lesson.section === "string" && lesson.section ? lesson.section : fallbackLesson.section,
     title: typeof lesson.title === "string" && lesson.title ? lesson.title : fallbackLesson.title,
     keyPhrase:

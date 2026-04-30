@@ -70,6 +70,7 @@ function makeFrame({
   away,
   arrows = [],
   notes = [],
+  overlay,
 }) {
   return {
     id,
@@ -79,6 +80,14 @@ function makeFrame({
     awayPlayers: mergeRoster(rosterFromRoles(AWAY_ROLES, "away"), away),
     arrows,
     notes,
+    overlay: overlay ?? {
+      text: notes.join("\n"),
+      x: 8,
+      y: 8,
+      width: 34,
+      fontSize: 2.2,
+      padding: 2.2,
+    },
   };
 }
 
@@ -121,6 +130,7 @@ export function createEmptyScenario(title = "New Scenario") {
 export function createEmptyLesson(title = "New Concept") {
   return {
     id: crypto.randomUUID(),
+    active: true,
     section: "Custom Concept",
     title,
     keyPhrase: "Add a teaching phrase.",

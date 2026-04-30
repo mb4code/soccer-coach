@@ -18,6 +18,44 @@ function getPoint(bounds, clientX, clientY) {
   };
 }
 
+function getOverlayMetrics(overlay = {}) {
+  const fontSize = Number.isFinite(overlay.fontSize) ? overlay.fontSize : 2.2;
+  const padding = Number.isFinite(overlay.padding) ? overlay.padding : 2.2;
+  const lineHeight = fontSize * 1.35;
+  const availableWidth = Math.max(8, overlay.width - padding * 2);
+  const maxCharacters = Math.max(8, Math.floor(availableWidth / (fontSize * 0.54)));
+  const paragraphs = (overlay.text || "").split("\n").filter((line) => line.trim().length > 0);
+  const visibleParagraphs = paragraphs.length > 0 ? paragraphs : ["Add overlay text."];
+  const lines = visibleParagraphs.flatMap((paragraph) => {
+    const words = paragraph.trim().split(/\s+/);
+    const wrapped = [];
+    let currentLine = "";
+
+    words.forEach((word) => {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (candidate.length <= maxCharacters) {
+        currentLine = candidate;
+        return;
+      }
+
+      if (currentLine) {
+        wrapped.push(currentLine);
+      }
+      currentLine = word;
+    });
+
+    return [...wrapped, currentLine].filter(Boolean);
+  });
+
+  return {
+    lines,
+    height: lines.length * lineHeight + padding * 2,
+    fontSize,
+    padding,
+    lineHeight,
+  };
+}
+
 export default function Pitch({
   frame,
   selected,
@@ -37,6 +75,7 @@ export default function Pitch({
 
     return frame.arrows.find((arrow) => arrow.id === selected.id) ?? null;
   }, [frame.arrows, selected]);
+  const overlayMetrics = useMemo(() => getOverlayMetrics(frame.overlay), [frame.overlay]);
 
   function beginDrag(event, payload) {
     if (!authorMode) {
@@ -104,6 +143,50 @@ export default function Pitch({
         >
           {player.label}
         </text>
+      </g>
+    );
+  }
+
+  function renderOverlay() {
+    const overlay = frame.overlay;
+    if (!overlay || !overlay.text?.trim()) {
+      return null;
+    }
+
+    const isSelected = selected?.kind === "overlay";
+    const { lines, height, fontSize, padding, lineHeight } = overlayMetrics;
+
+    return (
+      <g
+        className={authorMode ? "pitch-overlay editable" : "pitch-overlay"}
+        onPointerDown={(event) => beginDrag(event, { kind: "overlay" })}
+        onClick={() => onSelect({ kind: "overlay" })}
+      >
+        <rect
+          x={overlay.x}
+          y={overlay.y}
+          width={overlay.width}
+          height={height}
+          rx="3"
+          fill="rgba(255, 248, 224, 0.94)"
+          stroke={isSelected ? "#d2801c" : "rgba(8, 51, 68, 0.28)"}
+          strokeWidth={isSelected ? "0.9" : "0.55"}
+          style={{ transition: "x 400ms ease, y 400ms ease, width 400ms ease" }}
+        />
+        {lines.map((line, index) => (
+          <text
+            key={`${overlay.x}-${overlay.y}-${index}`}
+            x={overlay.x + padding}
+            y={overlay.y + padding + fontSize + index * lineHeight}
+            className="overlay-text"
+            style={{
+              fontSize,
+              transition: "x 400ms ease, y 400ms ease",
+            }}
+          >
+            {line}
+          </text>
+        ))}
       </g>
     );
   }
@@ -200,6 +283,8 @@ export default function Pitch({
           );
         })}
 
+        {renderOverlay()}
+
         {frame.awayPlayers.map((player) => renderPlayer(player, "awayPlayer"))}
         {frame.homePlayers.map((player) => renderPlayer(player, "homePlayer"))}
 
@@ -242,7 +327,7 @@ export default function Pitch({
         </g>
       </svg>
       <div className="field-footer">
-        <span>{hoverLabel ?? "Use the editor to move players, the ball, and arrow points."}</span>
+        <span>{hoverLabel ?? (authorMode ? "Use the editor to move players, the ball, and arrow points." : "")}</span>
       </div>
     </div>
   );

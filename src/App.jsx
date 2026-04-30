@@ -29,6 +29,14 @@ function clampCoordinate(value, max) {
   return Math.max(0, Math.min(max, numeric));
 }
 
+function isPlayerKind(kind) {
+  return kind === "homePlayer" || kind === "awayPlayer";
+}
+
+function isPlayerHidden(player) {
+  return player.x < 0 || player.x > 100 || player.y < 0 || player.y > 140;
+}
+
 function getSelectedEntity(frame, selected) {
   if (!selected) {
     return null;
@@ -50,6 +58,10 @@ function getSelectedEntity(frame, selected) {
     return frame.arrows.find((arrow) => arrow.id === selected.id) ?? null;
   }
 
+  if (selected.kind === "overlay") {
+    return frame.overlay ?? null;
+  }
+
   return null;
 }
 
@@ -63,6 +75,55 @@ function clampIndex(index, length) {
   }
 
   return Math.max(0, Math.min(index, length - 1));
+}
+
+function getPlaybackProgress(frameIndex, frameCount) {
+  if (frameCount <= 1) {
+    return 100;
+  }
+
+  return (frameIndex / (frameCount - 1)) * 100;
+}
+
+function clampRange(value, min, max, fallback = min) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(max, numeric));
+}
+
+function clampOverlayValue(field, value, fallback) {
+  if (field === "text") {
+    return value;
+  }
+
+  const limits = {
+    x: [0, 100],
+    y: [0, 140],
+    width: [18, 86],
+    fontSize: [1.5, 3],
+    padding: [1, 4],
+  };
+  const [min, max] = limits[field] ?? [0, 140];
+  return clampRange(value, min, max, fallback ?? min);
+}
+
+function ViewerHeaderButton({ onClick, children, kind = "ghost" }) {
+  return (
+    <button
+      type="button"
+      className={
+        kind === "primary"
+          ? "primary-button viewer-action-button viewer-action-button-primary"
+          : "ghost-button viewer-action-button"
+      }
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
 }
 
 function TitleBar({ page, onNavigate, authoringEnabled }) {
@@ -109,11 +170,20 @@ export default function App() {
   const [jsonBuffer, setJsonBuffer] = useState("");
   const [statusMessage, setStatusMessage] = useState("Autosaving locally.");
   const [filePickerKey, setFilePickerKey] = useState(0);
+  const [viewerStep, setViewerStep] = useState("library");
 
   const lesson = library[lessonIndex];
   const scenario = lesson.scenarios[scenarioIndex];
   const frame = scenario.frames[frameIndex];
+  const viewerLessons = useMemo(
+    () =>
+      library
+        .map((item, index) => ({ ...item, libraryIndex: index }))
+        .filter((item) => item.active !== false),
+    [library],
+  );
   const selectedEntity = useMemo(() => getSelectedEntity(frame, selected), [frame, selected]);
+  const playbackProgress = getPlaybackProgress(frameIndex, scenario.frames.length);
 
   function resetEditorState({ nextScenarioIndex = 0, nextFrameIndex = 0 } = {}) {
     setScenarioIndex(nextScenarioIndex);
@@ -161,6 +231,24 @@ export default function App() {
   useEffect(() => {
     resetEditorState();
   }, [lessonIndex]);
+
+  useEffect(() => {
+    setLessonIndex((current) => clampIndex(current, library.length));
+  }, [library.length]);
+
+  useEffect(() => {
+    if (page !== "view" || viewerStep === "library" || lesson.active !== false) {
+      return;
+    }
+
+    const nextLesson = viewerLessons[0];
+    if (nextLesson) {
+      handleSelectLesson(nextLesson.libraryIndex);
+      return;
+    }
+
+    setViewerStep("library");
+  }, [lesson.active, page, viewerLessons, viewerStep]);
 
   useEffect(() => {
     resetEditorState({ nextScenarioIndex: scenarioIndex, nextFrameIndex: 0 });
@@ -270,6 +358,17 @@ export default function App() {
         };
       }
 
+      if (target.kind === "overlay") {
+        return {
+          ...currentFrame,
+          overlay: {
+            ...currentFrame.overlay,
+            x: point.x,
+            y: point.y,
+          },
+        };
+      }
+
       return currentFrame;
     });
   }
@@ -279,10 +378,22 @@ export default function App() {
       return;
     }
 
-    const bounded = clampCoordinate(value, axis === "x" ? 100 : 140);
+    const max = axis === "x" ? 100 : isPlayerKind(selected.kind) ? 160 : 140;
+    const bounded = clampCoordinate(value, max);
     moveEntity(selected.kind === "arrow" ? { kind: "arrowEnd", id: selected.id } : selected, {
       ...(selectedEntity ?? {}),
       [axis]: bounded,
+    });
+  }
+
+  function setSelectedPlayerHidden(hidden) {
+    if (!selectedEntity || !isPlayerKind(selected?.kind)) {
+      return;
+    }
+
+    moveEntity(selected, {
+      x: hidden ? selectedEntity.x : clampRange(selectedEntity.x, 8, 92, 50),
+      y: hidden ? 150 : 126,
     });
   }
 
@@ -298,6 +409,28 @@ export default function App() {
         arrow.id === selected.id ? { ...arrow, [axis]: bounded } : arrow,
       ),
     }));
+  }
+
+  function handleFrameOverlayInput(field, value) {
+    updateCurrentFrame((currentFrame) => ({
+      ...currentFrame,
+      overlay: {
+        ...currentFrame.overlay,
+        [field]: clampOverlayValue(field, value, currentFrame.overlay?.[field]),
+      },
+    }));
+  }
+
+  function handlePlay() {
+    if (frameIndex >= scenario.frames.length - 1) {
+      setFrameIndex(0);
+    }
+    setIsPlaying(true);
+  }
+
+  function jumpToFrame(index) {
+    setIsPlaying(false);
+    setFrameIndex(index);
   }
 
   function updateSummary(index, value) {
@@ -350,6 +483,45 @@ export default function App() {
     setStatusMessage("Downloaded the lesson library as a JSON file.");
   }
 
+  function deleteCurrentLesson() {
+    if (library.length <= 1) {
+      setStatusMessage("Keep at least one concept in the authoring library.");
+      return;
+    }
+
+    const nextLessonIndex = Math.max(0, Math.min(lessonIndex, library.length - 2));
+    updateLibrary((current) => current.filter((_, index) => index !== lessonIndex));
+    resetEditorState({ nextFrameIndex: 0, nextScenarioIndex: 0 });
+    setLessonIndex(nextLessonIndex);
+    setViewerStep("library");
+    setStatusMessage(`Deleted "${lesson.title}" from the local library.`);
+  }
+
+  function moveLesson(index, direction) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= library.length) {
+      return;
+    }
+
+    updateLibrary((current) => {
+      const next = [...current];
+      const [movedLesson] = next.splice(index, 1);
+      next.splice(targetIndex, 0, movedLesson);
+      return next;
+    });
+    setLessonIndex((current) => {
+      if (current === index) {
+        return targetIndex;
+      }
+      if (current === targetIndex) {
+        return index;
+      }
+      return current;
+    });
+    setViewerStep("library");
+    setStatusMessage(`Moved "${library[index].title}" ${direction < 0 ? "up" : "down"} in the concept library.`);
+  }
+
   function handleUploadLibrary(event) {
     const file = event.target.files?.[0];
     if (!file) {
@@ -374,16 +546,39 @@ export default function App() {
     return (
       <div className="concept-strip">
         {library.map((item, index) => (
-          <button
-            key={item.id}
-            type="button"
-            className={lessonIndex === index ? "concept-button active" : "concept-button"}
-            onClick={() => setLessonIndex(index)}
-          >
-            <span>{item.section}</span>
-            <strong>{item.title}</strong>
-            <em>{item.keyPhrase}</em>
-          </button>
+          <div key={item.id} className="concept-card">
+            <button
+              type="button"
+              className={[
+                "concept-button",
+                lessonIndex === index ? "active" : "",
+                item.active === false ? "inactive" : "",
+              ].filter(Boolean).join(" ")}
+              onClick={() => setLessonIndex(index)}
+            >
+              <span>{item.active === false ? "Inactive" : item.section}</span>
+              <strong>{item.title}</strong>
+              <em>{item.keyPhrase}</em>
+            </button>
+            <div className="concept-reorder-actions" aria-label={`Reorder ${item.title}`}>
+              <button
+                type="button"
+                className="mini-button"
+                disabled={index === 0}
+                onClick={() => moveLesson(index, -1)}
+              >
+                Up
+              </button>
+              <button
+                type="button"
+                className="mini-button"
+                disabled={index === library.length - 1}
+                onClick={() => moveLesson(index, 1)}
+              >
+                Down
+              </button>
+            </div>
+          </div>
         ))}
         {authoringEnabled && page === "author" ? (
           <button
@@ -400,6 +595,155 @@ export default function App() {
         ) : null}
       </div>
     );
+  }
+
+  function handleSelectLesson(index) {
+    setLessonIndex(index);
+    setScenarioIndex(0);
+    setFrameIndex(0);
+    setIsPlaying(false);
+    setViewerStep("demo");
+  }
+
+  function renderPlaybackBar() {
+    return (
+      <div className="playback-card">
+        <div className="playback-header">
+          <span className="eyebrow">Playback Progress</span>
+          <span className="frame-status">
+            Frame {frameIndex + 1} of {scenario.frames.length}
+          </span>
+        </div>
+        <div className="playback-track" aria-hidden="true">
+          <div className="playback-track-fill" style={{ width: `${playbackProgress}%` }} />
+        </div>
+        <div className="playback-steps" role="tablist" aria-label="Demo frames">
+          {scenario.frames.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className={frameIndex === index ? "playback-step active" : "playback-step"}
+              onClick={() => jumpToFrame(index)}
+              aria-label={`Go to ${item.label}`}
+            >
+              <span className="playback-step-dot" />
+              <span className="playback-step-label">{item.label}</span>
+              {index < scenario.frames.length - 1 ? (
+                <span className="playback-step-arrow" aria-hidden="true">
+                  →
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderViewerLibrary() {
+    return (
+      <div className="viewer-stage">
+        <div className="viewer-stage-header">
+          <div>
+            <p className="eyebrow">Concept Library</p>
+            <h2>Pick a concept to explore</h2>
+          </div>
+          <p className="small-note">
+            Move one concept at a time so the field demo stays clear and easy to use on a phone.
+          </p>
+        </div>
+
+        <div className="concept-strip viewer-concept-strip">
+          {viewerLessons.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={lessonIndex === item.libraryIndex ? "concept-button active" : "concept-button"}
+              onClick={() => handleSelectLesson(item.libraryIndex)}
+            >
+              <span>{item.section}</span>
+              <strong>{item.title}</strong>
+              <em>{item.keyPhrase}</em>
+            </button>
+          ))}
+          {viewerLessons.length === 0 ? (
+            <p className="small-note">No active concepts are available in the viewer.</p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderViewerDemo() {
+    return (
+      <div className="viewer-stage viewer-demo-stage">
+        <div className="viewer-stage-header">
+          <div className="viewer-stage-actions">
+            <ViewerHeaderButton onClick={() => setViewerStep("library")}>
+              Concept Library
+            </ViewerHeaderButton>
+          </div>
+          <div>
+            <p className="eyebrow">{lesson.title}</p>
+            <h2>{scenario.title}</h2>
+            <p className="small-note">{scenario.description}</p>
+          </div>
+        </div>
+
+        <div className="scenario-strip viewer-scenario-strip">
+          {lesson.scenarios.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className={scenarioIndex === index ? "scenario-button active" : "scenario-button"}
+              onClick={() => setScenarioIndex(index)}
+            >
+              {item.title}
+            </button>
+          ))}
+        </div>
+
+        <div className="demo-toolbar viewer-demo-toolbar">
+          <button
+            type="button"
+            className="primary-button viewer-action-button viewer-action-button-primary"
+            onClick={handlePlay}
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            className="ghost-button viewer-action-button"
+            onClick={() => {
+              setIsPlaying(false);
+              setFrameIndex(0);
+            }}
+          >
+            Reset
+          </button>
+          <span className="frame-status">Tap the playback bar to jump to any frame.</span>
+        </div>
+
+        {renderPlaybackBar()}
+
+        <Pitch
+          frame={frame}
+          selected={selected}
+          authorMode={false}
+          onSelect={() => {}}
+          onMove={moveEntity}
+          frameLabel={frame.label}
+        />
+      </div>
+    );
+  }
+
+  function renderViewerExperience() {
+    if (viewerStep === "library") {
+      return renderViewerLibrary();
+    }
+
+    return renderViewerDemo();
   }
 
   function renderScenarioPlayer() {
@@ -461,6 +805,27 @@ export default function App() {
                   }
                 />
               </label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={lesson.active !== false}
+                  onChange={(event) =>
+                    updateCurrentLesson((currentLesson) => ({
+                      ...currentLesson,
+                      active: event.target.checked,
+                    }))
+                  }
+                />
+                Active in Viewer
+              </label>
+              <button
+                type="button"
+                className="ghost-button danger-button"
+                disabled={library.length <= 1}
+                onClick={deleteCurrentLesson}
+              >
+                Delete Concept
+              </button>
             </div>
           ) : null}
         </div>
@@ -490,24 +855,8 @@ export default function App() {
         </div>
 
         <div className="demo-toolbar">
-          <button type="button" className="primary-button" onClick={() => setIsPlaying(true)}>
+          <button type="button" className="primary-button" onClick={handlePlay}>
             Play
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => setFrameIndex((current) => Math.max(current - 1, 0))}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() =>
-              setFrameIndex((current) => Math.min(current + 1, scenario.frames.length - 1))
-            }
-          >
-            Next
           </button>
           <button
             type="button"
@@ -519,10 +868,10 @@ export default function App() {
           >
             Reset
           </button>
-          <span className="frame-status">
-            Frame {frameIndex + 1} of {scenario.frames.length}
-          </span>
+          <span className="frame-status">Tap the playback bar to jump between frames.</span>
         </div>
+
+        {renderPlaybackBar()}
 
         <Pitch
           frame={frame}
@@ -535,7 +884,7 @@ export default function App() {
 
           <div className="coach-board single-column">
             <div className="coach-board-copy">
-              <p className="eyebrow">Scenario Notes</p>
+              <p className="eyebrow">Scenario Setup</p>
             {authoringEnabled && page === "author" ? (
               <>
                 <label>
@@ -584,15 +933,6 @@ export default function App() {
                     <li key={`${scenario.id}-view-summary-${index}`}>{bullet}</li>
                   ))}
                 </ul>
-                <div className="frame-notes-panel">
-                  <p className="eyebrow">Current Frame Notes</p>
-                  <h3 className="frame-note-title">{frame.label}</h3>
-                  <ul className="notice-list">
-                    {frame.notes?.map((note, index) => (
-                      <li key={`${frame.id}-view-note-${index}`}>{note}</li>
-                    ))}
-                  </ul>
-                </div>
               </>
             )}
           </div>
@@ -607,33 +947,37 @@ export default function App() {
 
       <main className={authoringEnabled && page === "author" ? "studio-grid" : "viewer-grid"}>
         <section className="lesson-panel workspace-panel">
-          <div className="lesson-header">
-            <div>
-              <p className="eyebrow">Concept Library</p>
-              <h2>{lesson.title}</h2>
-            </div>
-            {authoringEnabled && page === "author" ? (
-              <div className="tab-strip">
-                <button
-                  type="button"
-                  className={authorMode ? "tab active" : "tab"}
-                  onClick={() => setAuthorMode(true)}
-                >
-                  Author
-                </button>
-                <button
-                  type="button"
-                  className={!authorMode ? "tab active" : "tab"}
-                  onClick={() => setAuthorMode(false)}
-                >
-                  Preview
-                </button>
+          {authoringEnabled && page === "author" ? (
+            <>
+              <div className="lesson-header">
+                <div>
+                  <p className="eyebrow">Concept Library</p>
+                  <h2>{lesson.title}</h2>
+                </div>
+                <div className="tab-strip">
+                  <button
+                    type="button"
+                    className={authorMode ? "tab active" : "tab"}
+                    onClick={() => setAuthorMode(true)}
+                  >
+                    Author
+                  </button>
+                  <button
+                    type="button"
+                    className={!authorMode ? "tab active" : "tab"}
+                    onClick={() => setAuthorMode(false)}
+                  >
+                    Preview
+                  </button>
+                </div>
               </div>
-            ) : null}
-          </div>
 
-          {renderConceptLibrary()}
-          {renderScenarioPlayer()}
+              {renderConceptLibrary()}
+              {renderScenarioPlayer()}
+            </>
+          ) : (
+            renderViewerExperience()
+          )}
         </section>
 
         {authoringEnabled && page === "author" ? (
@@ -694,34 +1038,69 @@ export default function App() {
               />
             </label>
             <div className="editable-list">
-              {(frame.notes ?? []).map((note, index) => (
-                <label key={`${frame.id}-note-${index}`}>
-                  Frame Note {index + 1}
+              <label>
+                Overlay Text
+                <textarea
+                  rows={4}
+                  value={frame.overlay?.text ?? ""}
+                  onChange={(event) => handleFrameOverlayInput("text", event.target.value)}
+                />
+              </label>
+              <div className="coordinate-grid">
+                <label>
+                  Box X
                   <input
-                    value={note}
-                    onChange={(event) =>
-                      updateCurrentFrame((currentFrame) => ({
-                        ...currentFrame,
-                        notes: (currentFrame.notes ?? []).map((item, itemIndex) =>
-                          itemIndex === index ? event.target.value : item,
-                        ),
-                      }))
-                    }
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={frame.overlay?.x ?? 8}
+                    onChange={(event) => handleFrameOverlayInput("x", event.target.value)}
                   />
                 </label>
-              ))}
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() =>
-                  updateCurrentFrame((currentFrame) => ({
-                    ...currentFrame,
-                    notes: [...(currentFrame.notes ?? []), "Add another frame teaching note."],
-                  }))
-                }
-              >
-                Add Frame Note
-              </button>
+                <label>
+                  Box Y
+                  <input
+                    type="number"
+                    min="0"
+                    max="140"
+                    value={frame.overlay?.y ?? 8}
+                    onChange={(event) => handleFrameOverlayInput("y", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Box Width
+                  <input
+                    type="number"
+                    min="18"
+                    max="86"
+                    value={frame.overlay?.width ?? 34}
+                    onChange={(event) => handleFrameOverlayInput("width", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Text Size
+                  <input
+                    type="number"
+                    min="1.5"
+                    max="3"
+                    step="0.1"
+                    value={frame.overlay?.fontSize ?? 2.2}
+                    onChange={(event) => handleFrameOverlayInput("fontSize", event.target.value)}
+                  />
+                </label>
+                <label className="full-span">
+                  Box Padding
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    step="0.1"
+                    value={frame.overlay?.padding ?? 2.2}
+                    onChange={(event) => handleFrameOverlayInput("padding", event.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="small-note">The overlay wraps to fit the box in both author and viewer mode.</p>
             </div>
           </div>
 
@@ -735,14 +1114,15 @@ export default function App() {
                     <button
                       key={player.id}
                       type="button"
-                      className={
-                        selected?.kind === "homePlayer" && selected.id === player.id
-                          ? "entity-button active"
-                          : "entity-button"
-                      }
+                      className={[
+                        "entity-button",
+                        selected?.kind === "homePlayer" && selected.id === player.id ? "active" : "",
+                        isPlayerHidden(player) ? "hidden-player" : "",
+                      ].filter(Boolean).join(" ")}
                       onClick={() => setSelected({ kind: "homePlayer", id: player.id })}
                     >
                       {player.label}
+                      {isPlayerHidden(player) ? " hidden" : ""}
                     </button>
                   ))}
                 </div>
@@ -754,14 +1134,15 @@ export default function App() {
                     <button
                       key={player.id}
                       type="button"
-                      className={
-                        selected?.kind === "awayPlayer" && selected.id === player.id
-                          ? "entity-button active"
-                          : "entity-button"
-                      }
+                      className={[
+                        "entity-button",
+                        selected?.kind === "awayPlayer" && selected.id === player.id ? "active" : "",
+                        isPlayerHidden(player) ? "hidden-player" : "",
+                      ].filter(Boolean).join(" ")}
                       onClick={() => setSelected({ kind: "awayPlayer", id: player.id })}
                     >
                       {player.label}
+                      {isPlayerHidden(player) ? " hidden" : ""}
                     </button>
                   ))}
                 </div>
@@ -771,6 +1152,13 @@ export default function App() {
             <div className="stack-buttons">
               <button type="button" className="ghost-button" onClick={() => setSelected({ kind: "ball" })}>
                 Select Ball
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setSelected({ kind: "overlay" })}
+              >
+                Select Overlay
               </button>
               <button
                 type="button"
@@ -861,6 +1249,8 @@ export default function App() {
                     <input value={selectedEntity.y} onChange={(event) => handleEntityInput("y", event.target.value)} />
                   </label>
                 </div>
+              ) : selected?.kind === "overlay" ? (
+                <p className="small-note">Overlay text and box settings are in Frame Builder. Drag the selected overlay on the field to reposition it.</p>
               ) : (
                 <div className="coordinate-grid">
                   <label className="full-span">
@@ -885,12 +1275,36 @@ export default function App() {
                   </label>
                   <label>
                     Y
-                    <input value={selectedEntity.y} onChange={(event) => handleEntityInput("y", event.target.value)} />
+                    <input
+                      type="number"
+                      max="160"
+                      value={selectedEntity.y}
+                      onChange={(event) => handleEntityInput("y", event.target.value)}
+                    />
                   </label>
+                  <div className="stack-buttons full-span">
+                    {isPlayerHidden(selectedEntity) ? (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setSelectedPlayerHidden(false)}
+                      >
+                        Show Player
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setSelectedPlayerHidden(true)}
+                      >
+                        Hide Player
+                      </button>
+                    )}
+                  </div>
                 </div>
               )
             ) : (
-              <p className="small-note">Select a player, the ball, or an arrow to edit its position.</p>
+              <p className="small-note">Select a player, the ball, the overlay, or an arrow to edit its position.</p>
             )}
           </div>
 
