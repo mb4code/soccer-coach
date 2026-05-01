@@ -1,6 +1,10 @@
 import { createBlankFrame, createEmptyLesson, createEmptyScenario, defaultLessons } from "../data/defaultLessons";
+import authoredLibrary from "../../soccer-iq-lesson-library.json";
 
 const STORAGE_KEY = "soccer-iq-studio-library";
+const SEEDED_LIBRARY = Array.isArray(authoredLibrary) && authoredLibrary.length > 0
+  ? authoredLibrary
+  : defaultLessons;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -161,7 +165,7 @@ function normalizeLesson(lesson, index) {
 
 export function normalizeLibrary(library) {
   if (!Array.isArray(library) || library.length === 0) {
-    return cloneLibrary(defaultLessons);
+    return cloneLibrary(SEEDED_LIBRARY);
   }
 
   return library.map(normalizeLesson);
@@ -175,16 +179,20 @@ export function cloneLibrary(library) {
   return JSON.parse(JSON.stringify(library));
 }
 
-export function loadLibrary() {
+export function loadLibrary(useLocalStorage = true) {
+  if (!useLocalStorage) {
+    return normalizeLibrary(SEEDED_LIBRARY);
+  }
+
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (!saved) {
-    return cloneLibrary(defaultLessons);
+    return normalizeLibrary(SEEDED_LIBRARY);
   }
 
   try {
     return normalizeLibrary(JSON.parse(saved));
   } catch {
-    return cloneLibrary(defaultLessons);
+    return normalizeLibrary(SEEDED_LIBRARY);
   }
 }
 
@@ -193,7 +201,7 @@ export function saveLibrary(library) {
 }
 
 export function resetLibrary() {
-  return cloneLibrary(defaultLessons);
+  return normalizeLibrary(SEEDED_LIBRARY);
 }
 
 export function addLesson(library) {

@@ -157,7 +157,7 @@ function TitleBar({ page, onNavigate, authoringEnabled }) {
 
 export default function App() {
   const authoringEnabled = import.meta.env.VITE_ENABLE_AUTHORING !== "false";
-  const [library, setLibrary] = useState(() => loadLibrary());
+  const [library, setLibrary] = useState(() => loadLibrary(authoringEnabled));
   const [page, setPage] = useState(() =>
     authoringEnabled && window.location.hash === "#/author" ? "author" : "view",
   );
