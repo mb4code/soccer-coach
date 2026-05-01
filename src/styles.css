@@ -184,10 +184,11 @@ textarea {
 }
 
 .viewer-library-button {
-  border-color: rgba(210, 128, 28, 0.45);
-  background: linear-gradient(135deg, #f2b94b, #ffe1a3);
+  border-color: rgba(154, 92, 20, 0.54);
+  background: linear-gradient(135deg, #f2b94b, #ffcf6d);
   color: #1d170d;
-  box-shadow: 0 16px 34px rgba(210, 128, 28, 0.24);
+  box-shadow: 0 18px 38px rgba(154, 92, 20, 0.32);
+  padding-inline: 18px;
 }
 
 .tab-strip {
@@ -646,10 +647,19 @@ textarea {
     padding: 14px 12px 28px;
   }
 
+  .studio-app:has(.viewer-demo-stage) {
+    padding-inline: 4px;
+  }
+
   .title-bar,
   .lesson-panel {
     border-radius: 22px;
     padding: 18px;
+  }
+
+  .studio-app:has(.viewer-demo-stage) .lesson-panel {
+    border-radius: 18px;
+    padding-inline: 6px;
   }
 
   .concept-strip,

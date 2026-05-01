@@ -279,7 +279,7 @@ export default function App() {
 
     const timer = window.setTimeout(() => {
       setFrameIndex((current) => current + 1);
-    }, 1400);
+    }, 3400);
 
     return () => window.clearTimeout(timer);
   }, [frameIndex, isPlaying, scenario.frames.length]);
@@ -684,7 +684,7 @@ export default function App() {
               className="viewer-library-button"
               onClick={() => setViewerStep("library")}
             >
-              Concept Library
+              Back to Concept Library
             </ViewerHeaderButton>
           </div>
           <div>
