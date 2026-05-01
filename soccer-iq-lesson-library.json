@@ -14,10 +14,10 @@
       {
         "id": "l1-s1",
         "title": "Crowded to Spread",
-        "description": "Show the same attack starting too cramped and then opening up.",
+        "description": "Don't crowd the field.  Move into space.  Create space on the field",
         "summary": [
-          "The first frame shows players crowding the ball.",
-          "The second frame spreads forwards, midfield, and defenders into useful lanes."
+          "",
+          ""
         ],
         "frames": [
           {
@@ -601,10 +601,10 @@
       {
         "id": "l2-s1",
         "title": "Attacking with our Defenders Supporting",
-        "description": "Show one ball carrier first isolated, then supported from multiple angles.",
+        "description": "We all move down the field together - keeping space",
         "summary": [
-          "Nearby teammates are not useful if defenders block the lane.",
-          "Angles make the next pass easier and safer."
+          "",
+          ""
         ],
         "frames": [
           {
@@ -1188,7 +1188,7 @@
       {
         "id": "l3-s1",
         "title": "Through Ball ",
-        "description": "Show the forward staying patient, then breaking behind at the right moment.",
+        "description": "The Forward waits for it, then breaking behind the defense at the right moment.",
         "summary": [
           "Frame 1: the forward checks position and waits.",
           "Frame 2: the pass is available and the run attacks the gap."
@@ -1784,10 +1784,10 @@
       {
         "id": "l4-s1",
         "title": "One Wide Ball, Multiple Runs",
-        "description": "Show a wide attack and how box runs can spread across different zones.",
+        "description": "Attacking from wide. Box runs spread across different zones.",
         "summary": [
-          "The first frame is static before the cross.",
-          "The second frame shows runners attacking different targets."
+          "",
+          ""
         ],
         "frames": [
           {
@@ -2550,10 +2550,10 @@
       {
         "id": "l5-s1",
         "title": "Clear the Ball",
-        "description": "Use three frames to show center shape, left shift, and connected far side.",
+        "description": "Don't overplay the ball in this danger zone. Just clear it!",
         "summary": [
-          "Start in a balanced central shape.",
-          "Then show the team sliding left while the far side tucks in."
+          "",
+          ""
         ],
         "frames": [
           {
