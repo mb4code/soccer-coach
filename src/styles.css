@@ -183,6 +183,13 @@ textarea {
   box-shadow: 0 16px 32px rgba(210, 128, 28, 0.28);
 }
 
+.viewer-library-button {
+  border-color: rgba(210, 128, 28, 0.45);
+  background: linear-gradient(135deg, #f2b94b, #ffe1a3);
+  color: #1d170d;
+  box-shadow: 0 16px 34px rgba(210, 128, 28, 0.24);
+}
+
 .tab-strip {
   display: inline-flex;
   gap: 8px;

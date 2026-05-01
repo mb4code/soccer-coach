@@ -110,15 +110,16 @@ function clampOverlayValue(field, value, fallback) {
   return clampRange(value, min, max, fallback ?? min);
 }
 
-function ViewerHeaderButton({ onClick, children, kind = "ghost" }) {
+function ViewerHeaderButton({ onClick, children, kind = "ghost", className = "" }) {
   return (
     <button
       type="button"
-      className={
+      className={[
         kind === "primary"
           ? "primary-button viewer-action-button viewer-action-button-primary"
-          : "ghost-button viewer-action-button"
-      }
+          : "ghost-button viewer-action-button",
+        className,
+      ].filter(Boolean).join(" ")}
       onClick={onClick}
     >
       {children}
@@ -133,15 +134,15 @@ function TitleBar({ page, onNavigate, authoringEnabled }) {
         <p className="eyebrow">U13 Soccer Team Dynamics</p>
         <h1>Lesson Studio</h1>
       </div>
-      <div className="tab-strip">
-        <button
-          type="button"
-          className={page === "view" ? "tab active" : "tab"}
-          onClick={() => onNavigate("view")}
-        >
-          View Lessons
-        </button>
-        {authoringEnabled ? (
+      {authoringEnabled ? (
+        <div className="tab-strip">
+          <button
+            type="button"
+            className={page === "view" ? "tab active" : "tab"}
+            onClick={() => onNavigate("view")}
+          >
+            View Lessons
+          </button>
           <button
             type="button"
             className={page === "author" ? "tab active" : "tab"}
@@ -149,8 +150,8 @@ function TitleBar({ page, onNavigate, authoringEnabled }) {
           >
             Author
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -679,7 +680,10 @@ export default function App() {
       <div className="viewer-stage viewer-demo-stage">
         <div className="viewer-stage-header">
           <div className="viewer-stage-actions">
-            <ViewerHeaderButton onClick={() => setViewerStep("library")}>
+            <ViewerHeaderButton
+              className="viewer-library-button"
+              onClick={() => setViewerStep("library")}
+            >
               Concept Library
             </ViewerHeaderButton>
           </div>
